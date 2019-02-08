@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Miku CrashTest</string>
+    <string name="preferences">com.miku.mikucrashtest.preferences</string>
+    <string name="preferences_certificate">com.miku.mikucrashtest.preferences.certificate</string>
+    <string name="preferences_fingerprint">com.miku.mikucrashtest.preferences.fingerprint</string>
+</resources>
