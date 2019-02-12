@@ -28,10 +28,6 @@ public class MainActivity extends AppCompatActivity {
         remoteVideoView = findViewById(R.id.surface_view);
 
         final String userId = "1";
-
-//        final String deviceId = "012818890511";
-//        final String fingerprint = "07813EFA4994C63C6A5D75F55F169744797A62FD1BA94ADE1910DF480979D716";
-
         final String deviceId = "012818890509";
         final String fingerprint = "C44505F32C8D03D3D1075844B4334988717A1C1A933EEC03E5158E3705AB662A";
 
