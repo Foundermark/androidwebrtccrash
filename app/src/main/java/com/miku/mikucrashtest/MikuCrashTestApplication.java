@@ -14,7 +14,6 @@ public class MikuCrashTestApplication extends MultiDexApplication {
 
         Timber.plant(new Timber.DebugTree());
         peerConnectionClient = new PeerConnectionClient(getApplicationContext());
-
     }
 
     public PeerConnectionClient peerConnectionClient() {

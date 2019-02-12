@@ -51,26 +51,20 @@ public class PeerConnectionClient implements SignalHandler {
     private final MediaConstraints sdpConstraints = new MediaConstraints();
     private PeerConnection peerConnection = null;
     private DataChannel avDataChannel = null;
-    private AudioSource audioSource;
     private VideoTrack videoTrack;
     private TextureViewRenderer remoteVideoView;
-    private MediaStream stream;
-    private AudioTrack localAudioTrack;
     private RtcCertificatePem certificate;
-    private WebRTCAudioFocusManager audioFocusManager;
     private boolean didSendOffer = false;
-    private boolean isMicrophoneOn = false;
-    private boolean isSpeakerOn = true;
-    private boolean isStandingBy = false;
-    private String userId;
     private boolean isDevicePaired = false;
     private String fromFingerprint;
     private String deviceId;
     private boolean isInitialized = false;
+    private MediaStream stream;
+    private AudioTrack localAudioTrack;
+    private AudioSource audioSource;
 
     public PeerConnectionClient(Context context) {
         this.context = context.getApplicationContext();
-        audioFocusManager = new WebRTCAudioFocusManager(this.context);
         rootEglBase = EglBase.create();
 
         final String pem = "-----BEGIN PRIVATE KEY-----\n" +
@@ -118,15 +112,13 @@ public class PeerConnectionClient implements SignalHandler {
                 "POSstTpsMd+k+bdlIUJ3lv4uJjTpkZF1zlH8GkRNVlWh/TBD4UPLLmSeeob0n1VX\n" +
                 "bw==\n" +
                 "-----END CERTIFICATE-----";
-        this.fromFingerprint = "609F78960011655CC618A4DB48B71894F8C1ECCC24AC7A2EE69A9CDDA0D4D34A";
         final String[] keys = TextUtils.split(pem, "\\|");
         this.certificate = new RtcCertificatePem(keys[0], keys[1]);
-
+        this.fromFingerprint = "609F78960011655CC618A4DB48B71894F8C1ECCC24AC7A2EE69A9CDDA0D4D34A";
     }
 
     public void setCredentials(String userId, String deviceId, String toFingerprint, String nonce, boolean isPaired) {
         Timber.tag(TAG).d("set credentials userId=%s deviceId=%s isPaired=%s", userId, deviceId, isPaired);
-//        this.changeUser(userId);
         this.isDevicePaired = isPaired;
         Timber.tag(TAG).d("comparing device id %s to new device id %s", this.deviceId, deviceId);
         if (this.deviceId == null || !this.deviceId.equals(deviceId)) {
@@ -145,33 +137,6 @@ public class PeerConnectionClient implements SignalHandler {
             }
         }
     }
-
-//    public void changeUser(String userId) {
-//        Timber.tag(TAG).d("change user to %s", userId);
-//        if (this.userId == null || !this.userId.equals(userId)) {
-//            this.userId = userId;
-//
-//            String pem = CertBuilder.getCertificate(this.context, userId);
-//            String fromFingerprint = CertBuilder.getFingerprint(this.context, userId);
-//
-//
-//            if (pem == null || fromFingerprint == null) {
-//                Timber.tag(TAG).d("CREATE NEW CERTIFICATE");
-//                CertBuilder.generateCertificate(this.context, userId);
-//                pem = CertBuilder.getCertificate(this.context, userId);
-//                fromFingerprint = CertBuilder.getFingerprint(this.context, userId);
-//            } else {
-//                Timber.tag(TAG).d("HAVE EXISTING CERTIFICATE");
-//            }
-//
-//            if (pem != null) {
-//                final String[] keys = TextUtils.split(pem, "\\|");
-//                this.certificate = new RtcCertificatePem(keys[0], keys[1]);
-//            }
-//
-//            this.fromFingerprint = fromFingerprint;
-//        }
-//    }
 
     public void connect() {
         Timber.tag(TAG).d("connect");
@@ -242,10 +207,6 @@ public class PeerConnectionClient implements SignalHandler {
     private void close() {
         Timber.tag(TAG).d("close");
 
-        if (audioFocusManager != null) {
-            audioFocusManager.stop();
-        }
-
         if (avDataChannel != null) {
             avDataChannel.close();
             avDataChannel.dispose();
@@ -296,18 +257,8 @@ public class PeerConnectionClient implements SignalHandler {
 
         final PeerConnectionFactory.InitializationOptions initializationOptions = PeerConnectionFactory.InitializationOptions.builder(context.getApplicationContext())
                 .setFieldTrials("false")
-//        .setEnableInternalTracer(true)
-//        .setEnableVideoHwAcceleration(true)
                 .createInitializationOptions();
         PeerConnectionFactory.initialize(initializationOptions);
-
-        // Track logs
-//    final String tracingFilename = Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator + "webrtc-trace.txt";
-//    Timber.tag(TAG).d("log webrtc trace to: %s", tracingFilename);
-//    if (!didInitialize) {
-//      PeerConnectionFactory.startInternalTracingCapture(tracingFilename);
-//      didInitialize = true;
-//    }
 
         final PeerConnectionFactory.Options options = new PeerConnectionFactory.Options();
         final DefaultVideoEncoderFactory defaultVideoEncoderFactory = new DefaultVideoEncoderFactory(rootEglBase.getEglBaseContext(), true, true);
@@ -323,7 +274,7 @@ public class PeerConnectionClient implements SignalHandler {
 
         audioSource = peerConnectionFactory.createAudioSource(audioConstraints);
         localAudioTrack = peerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource); // 101 previously
-//    checkConfig();
+        localAudioTrack.setEnabled(false); // muted for testing
         stream = peerConnectionFactory.createLocalMediaStream("ARDAMS"); // 102 previously
         stream.addTrack(localAudioTrack);
 
@@ -333,8 +284,6 @@ public class PeerConnectionClient implements SignalHandler {
         rtcConfig.continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY;
         rtcConfig.keyType = PeerConnection.KeyType.ECDSA;
         rtcConfig.certificate = this.certificate;
-//    rtcConfig.audioJitterBufferFastAccelerate = true;
-//    rtcConfig.audioJitterBufferMaxPackets = 1;
 
         didSendOffer = false;
         peerConnection = null;
@@ -404,7 +353,6 @@ public class PeerConnectionClient implements SignalHandler {
                 executor.execute(() -> addMediaStreams(mediaStreams));
             }
 
-//    }, certificate.privateKey, certificate.certificate);
         });
 
     }
@@ -497,25 +445,6 @@ public class PeerConnectionClient implements SignalHandler {
                 videoTrack.addSink(remoteVideoView);
             }
 
-        }
-        if (!mediaStream.audioTracks.isEmpty()) {
-            final AudioTrack remoteAudioTrack = mediaStream.audioTracks.get(0);
-            audioFocusManager.start(remoteAudioTrack);
-            updateAudio();
-        }
-    }
-
-    private void updateAudio() {
-        Timber.tag(TAG).d("update audio");
-        if (audioSource != null) {
-            if (localAudioTrack != null) {
-                localAudioTrack.setEnabled(isMicrophoneOn);
-            }
-            if (isSpeakerOn && !isStandingBy) {
-                audioFocusManager.requestAudioFocus();
-            } else {
-                audioFocusManager.abandonAudioFocus();
-            }
         }
     }
 
