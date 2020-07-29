@@ -63,9 +63,16 @@ public class PeerConnectionClient implements SignalHandler {
     private AudioTrack localAudioTrack;
     private AudioSource audioSource;
 
+    private WebRTCAudioFocusManager audioFocusManager;
+    private boolean isMicrophoneOn = false;
+    private boolean isSpeakerOn = true;
+    private boolean isStandingBy = false;
+
     public PeerConnectionClient(Context context) {
         this.context = context.getApplicationContext();
         rootEglBase = EglBase.create();
+
+        audioFocusManager = new WebRTCAudioFocusManager(this.context);
 
         final String pem = "-----BEGIN PRIVATE KEY-----\n" +
                 "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCtfc/lDsuFxc5P\n" +
@@ -113,6 +120,7 @@ public class PeerConnectionClient implements SignalHandler {
                 "bw==\n" +
                 "-----END CERTIFICATE-----";
         final String[] keys = TextUtils.split(pem, "\\|");
+
         this.certificate = new RtcCertificatePem(keys[0], keys[1]);
         this.fromFingerprint = "609F78960011655CC618A4DB48B71894F8C1ECCC24AC7A2EE69A9CDDA0D4D34A";
     }
@@ -207,6 +215,10 @@ public class PeerConnectionClient implements SignalHandler {
     private void close() {
         Timber.tag(TAG).d("close");
 
+        if (audioFocusManager != null) {
+            audioFocusManager.stop();
+        }
+
         if (avDataChannel != null) {
             avDataChannel.close();
             avDataChannel.dispose();
@@ -274,7 +286,7 @@ public class PeerConnectionClient implements SignalHandler {
 
         audioSource = peerConnectionFactory.createAudioSource(audioConstraints);
         localAudioTrack = peerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource); // 101 previously
-        localAudioTrack.setEnabled(false); // muted for testing
+//        localAudioTrack.setEnabled(false); // muted for testing
         stream = peerConnectionFactory.createLocalMediaStream("ARDAMS"); // 102 previously
         stream.addTrack(localAudioTrack);
 
@@ -445,6 +457,26 @@ public class PeerConnectionClient implements SignalHandler {
                 videoTrack.addSink(remoteVideoView);
             }
 
+        }
+
+        if (!mediaStream.audioTracks.isEmpty()) {
+            final AudioTrack remoteAudioTrack = mediaStream.audioTracks.get(0);
+            audioFocusManager.start(remoteAudioTrack);
+            updateAudio();
+        }
+    }
+
+    private void updateAudio() {
+        Timber.tag(TAG).d("update audio");
+        if (audioSource != null) {
+            if (localAudioTrack != null) {
+                localAudioTrack.setEnabled(isMicrophoneOn);
+            }
+            if (isSpeakerOn && !isStandingBy) {
+                audioFocusManager.requestAudioFocus();
+            } else {
+                audioFocusManager.abandonAudioFocus();
+            }
         }
     }
 
